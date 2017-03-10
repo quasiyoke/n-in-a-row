@@ -1,0 +1,25 @@
+{
+  "name": "n-in-a-row",
+  "version": "0.1.0",
+  "description": "\"N in a row\" game solver",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/quasiyoke/n-in-a-row.git"
+  },
+  "keywords": [
+    "N in a row",
+    "4 in a row",
+    "game",
+    "solver"
+  ],
+  "author": "Pyotr Ermishkin",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/quasiyoke/n-in-a-row/issues"
+  },
+  "homepage": "https://github.com/quasiyoke/n-in-a-row#readme"
+}

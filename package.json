@@ -21,5 +21,8 @@
   "bugs": {
     "url": "https://github.com/quasiyoke/n-in-a-row/issues"
   },
-  "homepage": "https://github.com/quasiyoke/n-in-a-row#readme"
+  "homepage": "https://github.com/quasiyoke/n-in-a-row#readme",
+  "dependencies": {
+    "lodash": "^4.17.4"
+  }
 }

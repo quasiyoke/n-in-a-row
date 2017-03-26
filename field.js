@@ -110,25 +110,34 @@ Field.prototype._getNextStepFieldOrNull = function (player, columnIndex) {
     return field._doStep(player, columnIndex) ? field : null;
 };
 
-Field.prototype._hasWon = function (player) {
+Field.prototype._processDirections = function (process) {
     let that = this;
-    return this._hasDirectionWon(player, 0, -TARGET_LENGTH, 0, ROWS_COUNT, (i, j, k) => that.columns[i + k][j]) ||
-        this._hasDirectionWon(player, 0, COLUMNS_COUNT, 0, -TARGET_LENGTH, (i, j, k) => that.columns[i][j + k]) ||
-        this._hasDirectionWon(player, 0, -TARGET_LENGTH, 0, -TARGET_LENGTH, (i, j, k) => {
+    return [
+        process(0, -TARGET_LENGTH, 0, ROWS_COUNT, (i, j, k) => that.columns[i + k][j]),
+        process(0, COLUMNS_COUNT, 0, -TARGET_LENGTH, (i, j, k) => that.columns[i][j + k]),
+        process(0, -TARGET_LENGTH, 0, -TARGET_LENGTH, (i, j, k) => {
             return that.columns[i + k][j + k];
-        }) ||
-        this._hasDirectionWon(player, 0, COLUMNS_COUNT, 0, -TARGET_LENGTH, (i, j, k) => {
-            return that.columns[i][j + k];
-        });
+        }),
+        process(0, -TARGET_LENGTH, TARGET_LENGTH - 1, ROWS_COUNT, (i, j, k) => {
+            return that.columns[i + k][j - k];
+        }),
+    ];
+};
+
+Field.prototype._hasWon = function (player) {
+    return this._processDirections(this._hasDirectionWon.bind(this, player))
+        .some(Boolean);
 };
 
 Field.prototype._hasDirectionWon = function (player, columnsBegin, columnsEnd, rowsBegin, rowsEnd, getCell) {
     return this.columns
         .slice(columnsBegin, columnsEnd)
         .some((column, i) => {
+            i += columnsBegin;
             return column
                 .slice(rowsBegin, rowsEnd)
                 .some((cell, j) => {
+                    j += rowsBegin;
                     for (let k = 0; k < TARGET_LENGTH; ++k) {
                         if (getCell(i, j, k) !== player) {
                             return false;
@@ -137,4 +146,80 @@ Field.prototype._hasDirectionWon = function (player, columnsBegin, columnsEnd, r
                     return true;
                 });
         });
+};
+
+Field.prototype._getPoints = function (player) {
+    return this._processDirections(this._getDirectionPoints.bind(this, player))
+        .reduce((points, directionPoints) => points + directionPoints, 0);
+};
+
+Field.prototype._getDirectionPoints = function (player, columnsBegin, columnsEnd, rowsBegin, rowsEnd, getCell) {
+    return this.columns
+        .slice(columnsBegin, columnsEnd)
+        .reduce((sum, column, i) => {
+            i += columnsBegin;
+            return sum + column
+                .slice(rowsBegin, rowsEnd)
+                .reduce((sum, cell, j) => {
+                    j += rowsBegin;
+                    if (getCell(i, j, 0) !== player) {
+                        return sum;
+                    }
+                    let mul = 1;
+                    for (let k = 1; k < TARGET_LENGTH; ++k) {
+                        if (getCell(i, j, k) !== player) {
+                            break;
+                        }
+                        mul *= 2;
+                    }
+                    return sum + mul;
+                }, 0);
+        }, 0);
+};
+
+Field.prototype.analyzeStep = function (player, columnIndex) {
+    let analytics = {
+        points: {
+            r: 0,
+            y: 0
+        },
+        won: {
+            r: 0,
+            y: 0
+        }
+    };
+    this._analyzeStep(player, columnIndex, 7, analytics);
+    updateCoefficients(analytics.points);
+    updateCoefficients(analytics.won);
+    return analytics;
+
+    function updateCoefficients(result) {
+        result.yr = result.y / result.r;
+    }
+};
+
+Field.prototype._analyzeStep = function (player, columnIndex, depth, analytics) {
+    let that = this;
+
+    let field = this._getNextStepFieldOrNull(player, columnIndex);
+    //console.log(field);
+    if (!field) {
+        return;
+    }
+
+    analytics.points[player] += field._getPoints(player);
+
+    if (field._hasWon(player)) {
+        ++analytics.won[player];
+        return;
+    }
+
+    if (--depth <= 0) {
+        return;
+    }
+
+    let anotherPlayer = this._getAnotherPlayer(player);
+    this.columns.forEach((column, columnIndex) => {
+        that._analyzeStep(anotherPlayer, columnIndex, depth, analytics);
+    });
 };

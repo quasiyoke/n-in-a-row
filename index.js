@@ -17,28 +17,15 @@ function main() {
     field.fill(cells, player);
 
     analyzeField(field, player);
-    let columnIndex = getSuccessfulColumnIndex(field, player);
-    if (isFinite(columnIndex)) {
-        console.log(columnIndex);
-    } else {
-        console.log('There\'s no success strategy :(');
-    }
 }
 
 function analyzeField(field, player) {
-    field.columns.forEach((column, columnIndex) => {
+    let analytics = field.columns.map((column, columnIndex) => {
         let analysis = field.analyzeStep(player, columnIndex);
-        console.log(`Step ${columnIndex} analysis: ${analysis}`);
+        analysis.columnIndex = columnIndex;
+        console.log(`Step ${columnIndex} analysis: `, analysis);
+        return analysis;
     });
-}
-
-/**
- * @param {Field} field
- * @param {string} player
- * @returns {number|undefined} First "winning" column index. If there's no such column returns `undefined`.
- */
-function getSuccessfulColumnIndex(field, player) {
-    return field.columns
-        .map((column, columnIndex) => columnIndex)
-        .find(field.isSuccessful.bind(field, player));
+    let best = _.maxBy(analytics, 'points.yr');
+    console.log(`The best is ${best.columnIndex}`);
 }

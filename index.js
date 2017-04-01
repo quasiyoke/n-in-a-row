@@ -20,12 +20,28 @@ function main() {
 }
 
 function analyzeField(field, player) {
-    let analytics = field.columns.map((column, columnIndex) => {
-        let analysis = field.analyzeStep(player, columnIndex);
-        analysis.columnIndex = columnIndex;
-        console.log(`Step ${columnIndex} analysis: `, analysis);
-        return analysis;
-    });
-    let best = _.maxBy(analytics, 'points.yr');
-    console.log(`The best is ${best.columnIndex}`);
+    let analyticses = field.getStepAnalysis(player);
+    console.log(analyticses);
+    analyticses = analyticses.filter(Boolean);
+    const winning = analyticses.filter((analytics) => analytics.wins === player);
+
+    if (winning.length) {
+        analyticses = winning;
+    } else {
+        analyticses = analyticses.filter((analytics) => typeof analytics.wins !== 'string');
+    }
+
+    if (!analyticses.length) {
+        console.log('We lose :(');
+        return;
+    }
+
+    showBest(analyticses, (analytics) => analytics.probableWinsCount, 'probableWinsCount');
+    showBest(analyticses, (analytics) => analytics.probableWinsCount / analytics.anotherProbableWinsCount, 'ratio');
+}
+
+function showBest(analyticses, getValue, name) {
+    const best = _.maxBy(analyticses, getValue);
+    const bestValue = getValue(best);
+    console.log(`The best by ${name} is ${best.columnIndex}: ${bestValue}`);
 }

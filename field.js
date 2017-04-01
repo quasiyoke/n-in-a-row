@@ -84,18 +84,15 @@ Field.prototype.isSuccessful = function (player, columnIndex) {
  * @returns {boolean} Is it possible to do such step
  */
 Field.prototype._doStep = function (player, columnIndex) {
-    let that = this;
-    let rowIndex = this.columns[columnIndex]
-        .map((cell, rowIndex) => rowIndex)
-        .find((rowIndex) => typeof that.columns[columnIndex][rowIndex] !== 'string');
+    const column = this.columns[columnIndex];
+    const rowIndex = column.findIndex((cell) => typeof cell !== 'string');
 
-    //console.log(rowIndex);
-    if (isFinite(rowIndex)) {
-        this.columns[columnIndex][rowIndex] = player;
-        return true;
-    } else {
+    if (rowIndex < 0) {
         return false;
     }
+
+    column[rowIndex] = player;
+    return true;
 };
 
 Field.prototype._getAnotherPlayer = function (player) {
@@ -113,12 +110,12 @@ Field.prototype._getNextStepFieldOrNull = function (player, columnIndex) {
 Field.prototype._processDirections = function (process) {
     let that = this;
     return [
-        process(0, -TARGET_LENGTH, 0, ROWS_COUNT, (i, j, k) => that.columns[i + k][j]),
-        process(0, COLUMNS_COUNT, 0, -TARGET_LENGTH, (i, j, k) => that.columns[i][j + k]),
-        process(0, -TARGET_LENGTH, 0, -TARGET_LENGTH, (i, j, k) => {
+        process(0, -TARGET_LENGTH + 1, 0, ROWS_COUNT, (i, j, k) => that.columns[i + k][j]),
+        process(0, COLUMNS_COUNT, 0, -TARGET_LENGTH + 1, (i, j, k) => that.columns[i][j + k]),
+        process(0, -TARGET_LENGTH + 1, 0, -TARGET_LENGTH + 1, (i, j, k) => {
             return that.columns[i + k][j + k];
         }),
-        process(0, -TARGET_LENGTH, TARGET_LENGTH - 1, ROWS_COUNT, (i, j, k) => {
+        process(0, -TARGET_LENGTH + 1, TARGET_LENGTH - 1, ROWS_COUNT, (i, j, k) => {
             return that.columns[i + k][j - k];
         }),
     ];
@@ -148,78 +145,111 @@ Field.prototype._hasDirectionWon = function (player, columnsBegin, columnsEnd, r
         });
 };
 
-Field.prototype._getPoints = function (player) {
-    return this._processDirections(this._getDirectionPoints.bind(this, player))
-        .reduce((points, directionPoints) => points + directionPoints, 0);
-};
-
-Field.prototype._getDirectionPoints = function (player, columnsBegin, columnsEnd, rowsBegin, rowsEnd, getCell) {
-    return this.columns
-        .slice(columnsBegin, columnsEnd)
-        .reduce((sum, column, i) => {
-            i += columnsBegin;
-            return sum + column
-                .slice(rowsBegin, rowsEnd)
-                .reduce((sum, cell, j) => {
-                    j += rowsBegin;
-                    if (getCell(i, j, 0) !== player) {
-                        return sum;
-                    }
-                    let mul = 1;
-                    for (let k = 1; k < TARGET_LENGTH; ++k) {
-                        if (getCell(i, j, k) !== player) {
-                            break;
-                        }
-                        mul *= 2;
-                    }
-                    return sum + mul;
-                }, 0);
-        }, 0);
-};
-
-Field.prototype.analyzeStep = function (player, columnIndex) {
-    let analytics = {
-        points: {
-            r: 0,
-            y: 0
-        },
-        won: {
-            r: 0,
-            y: 0
+Field.prototype.getStepAnalysis = function (player) {
+    const that = this;
+    return this.columns.map((column, columnIndex) => {
+        const analytics = that._getStepAnalysis(player, columnIndex, 6);
+        if (analytics) {
+            analytics.columnIndex = columnIndex;
         }
-    };
-    this._analyzeStep(player, columnIndex, 7, analytics);
-    updateCoefficients(analytics.points);
-    updateCoefficients(analytics.won);
-    return analytics;
-
-    function updateCoefficients(result) {
-        result.yr = result.y / result.r;
-    }
+        return analytics;
+    });
 };
 
-Field.prototype._analyzeStep = function (player, columnIndex, depth, analytics) {
-    let that = this;
+/**
+ * @returns {Object|null} `null`, if we can't do such step.
+ */
+Field.prototype._getStepAnalysis = function (player, columnIndex, depth) { // yyyryy,yyryrr,ryryry,yryryr,rryr,rryryr,ryry y -- это вообще-то не проигрыш. Оч. странно.
+    const field = this._getNextStepFieldOrNull(player, columnIndex);
 
-    let field = this._getNextStepFieldOrNull(player, columnIndex);
-    //console.log(field);
     if (!field) {
-        return;
+        return null;
     }
 
-    analytics.points[player] += field._getPoints(player);
+    const analytics = {};
 
     if (field._hasWon(player)) {
-        ++analytics.won[player];
-        return;
+        analytics.wins = player;
+        return analytics;
     }
+
+    analytics.probableWinsCount = field._getProbableWinsCount(player, columnIndex);
 
     if (--depth <= 0) {
-        return;
+        return analytics;
     }
 
-    let anotherPlayer = this._getAnotherPlayer(player);
-    this.columns.forEach((column, columnIndex) => {
-        that._analyzeStep(anotherPlayer, columnIndex, depth, analytics);
-    });
+    const anotherPlayer = this._getAnotherPlayer(player);
+    const analyticses = this.columns
+        .map((column, columnIndex) => field._getStepAnalysis(anotherPlayer, columnIndex, depth));
+    if (analyticses.some((analytics) => analytics && analytics.wins === anotherPlayer)) {
+        analytics.wins = anotherPlayer;
+    } else if (analyticses.every((analytics) => !analytics || analytics.wins === player)) {
+        analytics.wins = player;
+    }
+    analytics.anotherProbableWinsCount = _.max(_.map(analyticses, 'probableWinsCount'));
+    return analytics;
+};
+
+Field.prototype._getProbableWinsCount = function (player, columnIndex) {
+    const rowIndex = this._getRowIndex(columnIndex);
+    const getDirectionProbableWinsCount = this._getDirectionProbableWinsCount.bind(this, player);
+
+    return getDirectionProbableWinsCount((offset) => columnIndex + offset, (offset) => rowIndex) +
+           getDirectionProbableWinsCount((offset) => columnIndex,          (offset) => rowIndex + offset) +
+           getDirectionProbableWinsCount((offset) => columnIndex + offset, (offset) => rowIndex + offset) +
+           getDirectionProbableWinsCount((offset) => columnIndex + offset, (offset) => rowIndex - offset);
+};
+
+Field.prototype._getDirectionProbableWinsCount = function (player, getColumnIndex, getRowIndex) {
+    const that = this;
+
+    let positiveOffset;
+    for (positiveOffset = 1; positiveOffset < TARGET_LENGTH; ++positiveOffset) {
+        const columnIndex = getColumnIndex(positiveOffset);
+        const rowIndex = getRowIndex(positiveOffset);
+
+        if (!isIndexesOk(columnIndex, rowIndex) || !isCellOk(columnIndex, rowIndex)) {
+            break;
+        }
+    }
+
+    let negativeOffset;
+    for (negativeOffset = -1; negativeOffset > -TARGET_LENGTH; --negativeOffset) {
+        const columnIndex = getColumnIndex(negativeOffset);
+        const rowIndex = getRowIndex(negativeOffset);
+
+        if (!isIndexesOk(columnIndex, rowIndex) || !isCellOk(columnIndex, rowIndex)) {
+            break;
+        }
+    }
+
+    return Math.max(0, positiveOffset - negativeOffset - TARGET_LENGTH);
+
+    function isIndexesOk(columnIndex, rowIndex) {
+        return columnIndex >= 0 && columnIndex < COLUMNS_COUNT &&
+            rowIndex >= 0 && rowIndex < ROWS_COUNT;
+    }
+
+    function isCellOk(columnIndex, rowIndex) {
+        const cell = that.columns[columnIndex][rowIndex];
+        return cell === player || typeof cell !== 'string';
+    }
+};
+
+/**
+ * @param {number} columnIndex Column index.
+ * @returns {number} Index of the topmost ball.
+ */
+Field.prototype._getRowIndex = function (columnIndex) {
+    const column = this.columns[columnIndex];
+    let index = _.findIndex(column, (cell) => typeof cell !== 'string');
+
+    if (index < 0) {
+        return column.length - 1;
+    } else if (index == 0) {
+        throw 'Unexpected';
+    }
+
+    return index - 1;
 };
